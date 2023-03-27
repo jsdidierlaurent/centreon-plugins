@@ -40,6 +40,7 @@ sub new {
     };
 
     $self->{custom_modes}->{driver} = 'database::mongodb::custom::driver';
+    $self->{custom_modes}->{drivermongo3} = 'database::mongodb::custom::drivermongo3';
     return $self;
 }
 

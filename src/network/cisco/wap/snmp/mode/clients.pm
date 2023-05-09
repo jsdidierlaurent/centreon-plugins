@@ -116,7 +116,7 @@ sub manage_selection {
         };
     }
 
-    foreach my $radio (keys $self->{radios}) {
+    foreach my $radio (keys %{$self->{radios}}) {
         foreach (keys %{$snmp_result->{$oid_assoc_interface}}) {
             next if ($snmp_result->{$oid_assoc_interface}->{$_} !~ /$radio/i);
             $self->{radios}->{$radio}->{clients_connected}++;

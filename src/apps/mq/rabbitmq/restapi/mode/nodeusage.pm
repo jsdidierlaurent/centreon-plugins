@@ -30,8 +30,27 @@ use centreon::plugins::templates::catalog_functions qw(catalog_status_threshold 
 sub custom_status_output {
     my ($self, %options) = @_;
 
-    my $msg = "status: '" . $self->{result_values}->{status} . "'";
+    return sprintf(
+        'status: %s, watermark: %s',
+        $self->{result_values}->{status},
+        $self->{result_values}->{watermark}
+    );
+ 
+   my $msg = "status: '" . $self->{result_values}->{status} . "'";
     return $msg;
+}
+
+sub custom_ram_usage_output {
+    my ($self, %options) = @_;
+
+    return sprintf(
+        'Memory total: %s %s used: %s %s (%.2f%%) free: %s %s (%.2f%%)',
+        $self->{perfdata}->change_bytes(value => $self->{result_values}->{mem_limit}),
+        $self->{perfdata}->change_bytes(value => $self->{result_values}->{mem_used}),
+        $self->{result_values}->{mem_used_prct},
+        $self->{perfdata}->change_bytes(value => $self->{result_values}->{mem_free}),
+        $self->{result_values}->{mem_free_prct}
+    );
 }
 
 sub set_counters {
@@ -43,7 +62,7 @@ sub set_counters {
 
     $self->{maps_counters}->{node} = [
         { label => 'status', threshold => 0, set => {
-                key_values => [ { name => 'status' }, { name => 'display' } ],
+                key_values => [ { name => 'status' }, { name => 'watermark' }, { name => 'display' } ],
                 closure_custom_calc => \&catalog_status_calc,
                 closure_custom_output => $self->can('custom_status_output'),
                 closure_custom_perfdata => sub { return 0; },
@@ -67,7 +86,32 @@ sub set_counters {
                     { template => '%d', unit => 'B/s', min => 0, label_extra_instance => 1, instance_use => 'display' }
                 ]
             }
-        }
+        },
+        { label => 'memory-usage', nlabel => 'node.memory.usage.bytes', set => {
+                key_values => [ { name => 'mem_used' }, { name => 'mem_free' }, { name => 'mem_used_prct' }, { name => 'mem_free_prct' }, { name => 'mem_limit' } ],
+                closure_custom_output => $self->can('custom_ram_usage_output'),
+                perfdatas => [
+                    { template => '%d', min => 0, max => 'total', unit => 'B', cast_int => 1 }
+                ]
+            }
+        },
+        { label => 'memory-usage-free', display_ok => 0, nlabel => 'node.memory.free.bytes', set => {
+                key_values => [ { name => 'mem_free' }, { name => 'mem_used' }, { name => 'mem_used_prct' }, { name => 'mem_free_prct' }, { name => 'mem_limit' } ],
+                closure_custom_output => $self->can('custom_ram_usage_output'),
+                perfdatas => [
+                    { template => '%d', min => 0, max => 'total', unit => 'B', cast_int => 1 }
+                ]
+            }
+	},
+	{ label => 'memory-usage-prct', display_ok => 0, nlabel => 'node.memory.usage.percentage', set => {
+                key_values => [ { name => 'mem_used_prct' }, { name => 'mem_free' }, { name => 'mem_used' }, { name => 'mem_free_prct' }, { name => 'mem_limit' } ],
+                closure_custom_output => $self->can('custom_ram_usage_output'),
+                perfdatas => [
+                    { template => '%.2f', min => 0, max => 100, unit => '%' }
+                ]
+            }
+	}
+
     ];
 }
 
@@ -85,7 +129,7 @@ sub new {
     $options{options}->add_options(arguments => {
         'filter-name:s'     => { name => 'filter_name' },
         'warning-status:s'  => { name => 'warning_status', default => '' },
-        'critical-status:s' => { name => 'critical_status', default => '%{status} ne "running"' },
+        'critical-status:s' => { name => 'critical_status', default => '%{status} ne "running" || %{watermark} ne "notrunning"' },
     });
     return $self;
 }
@@ -100,7 +144,7 @@ sub check_options {
 sub manage_selection {
     my ($self, %options) = @_;
 
-    my $result = $options{custom}->query(url_path => '/api/nodes/?columns=name,running,io_write_bytes,io_read_bytes');
+    my $result = $options{custom}->query(url_path => '/api/nodes/?columns=name,running,io_write_bytes,io_read_bytes,mem_used,mem_limit,mem_alarm');
 
     $self->{node} = {};
     foreach (@$result) {
@@ -111,6 +155,12 @@ sub manage_selection {
             display => $_->{name},
             io_write_bytes => $_->{io_write_bytes},
             io_read_bytes => $_->{io_read_bytes},
+            mem_used => $_->{mem_used},
+            mem_limit => $_->{mem_limit},
+            mem_free => $_->{mem_limit} - $_->{mem_used},
+            mem_used_prct => 100 - (($_->{mem_limit} - $_->{mem_used}) * 100 / $_->{mem_limit}),
+            mem_free_prct => ($_->{mem_limit} - $_->{mem_used}) * 100 / $_->{mem_limit},
+            watermark => $_->{mem_alarm} ? 'running' : 'notrunning',
             status => $_->{running} ? 'running' : 'notrunning',
         };
     }
@@ -142,17 +192,17 @@ Filter node name (Can use regexp).
 =item B<--warning-status>
 
 Set warning threshold for status (Default: '').
-Can used special variables like: %{status}, %{display}
+Can used special variables like: %{status}, %{watermark}, %{display}
 
 =item B<--critical-status>
 
-Set critical threshold for status (Default: '%{status} ne "running"').
-Can used special variables like: %{status}, %{display}
+Set critical threshold for status (Default: '%{status} ne "running" || %{watermark} ne "notrunning"').
+Can used special variables like: %{status}, %{watermark}, %{display}
 
 =item B<--warning-*> B<--critical-*>
 
 Thresholds.
-Can be: 'read', 'write'.
+Can be: 'read', 'write', 'memory-usage', 'memory-free', 'memory-usage-prct'.
 
 =back
 

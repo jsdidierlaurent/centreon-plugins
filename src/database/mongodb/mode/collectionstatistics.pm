@@ -175,6 +175,9 @@ sub manage_selection {
         };
 
         foreach my $collection (sort @{$collections}) {
+            # Filter all system.* collections
+            next if $collection =~ /system\..*/;
+
             my $cl_stats = $options{custom}->run_command(
                 database => $database,
                 command => $options{custom}->ordered_hash(collStats => $collection)

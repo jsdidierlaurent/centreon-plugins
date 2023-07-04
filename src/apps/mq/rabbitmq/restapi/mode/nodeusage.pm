@@ -35,9 +35,6 @@ sub custom_status_output {
         $self->{result_values}->{status},
         $self->{result_values}->{watermark}
     );
- 
-   my $msg = "status: '" . $self->{result_values}->{status} . "'";
-    return $msg;
 }
 
 sub custom_ram_usage_output {
@@ -129,7 +126,7 @@ sub new {
     $options{options}->add_options(arguments => {
         'filter-name:s'     => { name => 'filter_name' },
         'warning-status:s'  => { name => 'warning_status', default => '' },
-        'critical-status:s' => { name => 'critical_status', default => '%{status} ne "running" || %{watermark} ne "notrunning"' },
+        'critical-status:s' => { name => 'critical_status', default => '%{status} ne "running" || %{watermark} ne "ok"' },
     });
     return $self;
 }
@@ -160,7 +157,7 @@ sub manage_selection {
             mem_free => $_->{mem_limit} - $_->{mem_used},
             mem_used_prct => 100 - (($_->{mem_limit} - $_->{mem_used}) * 100 / $_->{mem_limit}),
             mem_free_prct => ($_->{mem_limit} - $_->{mem_used}) * 100 / $_->{mem_limit},
-            watermark => $_->{mem_alarm} ? 'running' : 'notrunning',
+            watermark => $_->{mem_alarm} ? 'nok' : 'ok',
             status => $_->{running} ? 'running' : 'notrunning',
         };
     }
@@ -196,7 +193,7 @@ Can used special variables like: %{status}, %{watermark}, %{display}
 
 =item B<--critical-status>
 
-Set critical threshold for status (Default: '%{status} ne "running" || %{watermark} ne "notrunning"').
+Set critical threshold for status (Default: '%{status} ne "running" || %{watermark} ne "ok"').
 Can used special variables like: %{status}, %{watermark}, %{display}
 
 =item B<--warning-*> B<--critical-*>
